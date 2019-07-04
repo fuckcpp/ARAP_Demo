@@ -1,45 +1,19 @@
-#include <igl/opengl/glfw/Viewer.h>
-#include <igl/unproject_onto_mesh.h>
-#include <igl/arap.h>
-#include <igl/readDMAT.h>
-#include <igl/writeDMAT.h>
-#include <igl/readOBJ.h>
-#include <igl/writeOBJ.h>
-#include <igl/Timer.h>
-#include <igl/colon.h>
+#include "model.h"
 
-#include <iostream>
-#include <stdlib.h>
-#include <string>
-#include <vector>
-
-using namespace std;
-using namespace Eigen;
-using namespace igl::opengl::glfw;
-
-enum COORD_TYPE {
-	X_COORD,
-	Y_COORD,
-	Z_COORD,
-	NONE_COORD
-};
 COORD_TYPE coord_type = NONE_COORD;
 
 
-void render_quads_obj(Viewer& viewer);
+void render_quads_obj(string model, MatrixXd& v_out, MatrixXi& f_out);
 bool key_down(Viewer& viewer, unsigned char key, int modifier);
 bool key_pressed(Viewer& viewer, unsigned int key, int modifiers);
 bool mouse_down(Viewer& viewer, int button, int modifier);
 void move_face(Viewer& viewer, COORD_TYPE coord_type, double move_distance);
 bool pre_draw(Viewer& viewer);
-void print_MatrixXd(const MatrixXd& matrix);
-void print_MatrixXi(const MatrixXi& matrix);
-void ARAP_initial();
-void ARAP_PreCompute();
+//void ARAP_initial(Viewer& viewer);
+void ARAP_PreCompute(Viewer& viewer);
 
 igl::Timer timer;
 
-MatrixXd v_tri; MatrixXi f_tri;
 MatrixXd color;
 int fid;
 int lastfid = -1;
@@ -56,15 +30,56 @@ string model = "/horse_quad";
 //string model = "/box_test";
 //string model = "/cube_40k";
 
+vector<string> names =
+{"/NiGaoXinII_Base-Low-Head","/horse_quad" /*,"/horse_quad" *//*"/horse_quad","/NiGaoXinII_Base-Low-Head","/box_test","/cube_40k" */};
+vector<Model> models;
+
+int select_index = 0;
+
 int main(int argc, char* argv[]) {
 
 	Viewer viewer;
+	std::map<int, Eigen::RowVector3d> colors;
+	for (int i=0;i<names.size();i++)
+	{
+		select_index = i;
+		Model model(names[select_index]);
+		models.push_back(model);
+		MatrixXd v_tri; MatrixXi f_tri;
+		render_quads_obj(model.name, v_tri, f_tri);
 
-	render_quads_obj(viewer);
-	ARAP_initial();
+		if (!(viewer.data().F.rows() == 0 && viewer.data().V.rows() == 0))
+		{
+			viewer.append_mesh();
+		}
+		viewer.data().clear();
+		viewer.data().set_mesh(v_tri, f_tri);
+		colors.emplace(viewer.data().id, 0.5 * Eigen::RowVector3d::Random().array() + 0.5);
 
-	viewer.data().set_mesh(v_tri, f_tri);
-	viewer.core().align_camera_center(v_tri, f_tri);
+		igl::opengl::ViewerData& SelectedData = viewer.data_list[select_index];
+		VectorXi& v_setting = models[select_index].v_setting;
+		v_setting.resize(SelectedData.V.rows());
+		v_setting.setConstant(-1);
+		igl::readDMAT(TUTORIAL_SHARED_PATH + models[select_index].name + ".dmat", v_setting);
+		color = Eigen::MatrixXd::Constant(SelectedData.F.rows(), 3, 1);
+		for (int f = 0; f < SelectedData.F.rows(); f++)
+		{
+			if (v_setting(SelectedData.F(f, 0)) >= 0 && v_setting(SelectedData.F(f, 1)) >= 0 && v_setting(SelectedData.F(f, 2)) >= 0)
+			{
+				color.row(f) = purple;
+			}
+			else
+			{
+				color.row(f) = gold;
+			}
+		}
+		arap_data.max_iter = 10;
+		ARAP_PreCompute(viewer);
+	}
+
+	//ARAP_initial(viewer);
+
+	//viewer.core().align_camera_center(v_tri, f_tri);
 	viewer.data().set_colors(color);
 	viewer.data().set_face_based(true);
 	viewer.data().show_lines = true;
@@ -78,66 +93,56 @@ int main(int argc, char* argv[]) {
 	return 0;
 }
 
-void ARAP_initial()
-{
-	v_setting.resize(v_tri.rows());
-	v_setting.setConstant(-1);
-	igl::readDMAT(TUTORIAL_SHARED_PATH +model+".dmat", v_setting);
-	color = Eigen::MatrixXd::Constant(f_tri.rows(), 3, 1);
-	for (int f = 0; f < f_tri.rows(); f++)
-	{
-		if (v_setting(f_tri(f, 0)) >= 0 && v_setting(f_tri(f, 1)) >= 0 && v_setting(f_tri(f, 2)) >= 0)
-		{
-			color.row(f) = purple;
-		}
-		else
-		{
-			color.row(f) = gold;
-		}
-	}
-	arap_data.max_iter = 10;
+//void ARAP_initial(Viewer& viewer)
+//{
+//	igl::opengl::ViewerData& SelectedData = viewer.data_list[select_index];
+//	v_setting.resize(SelectedData.V.rows());
+//	v_setting.setConstant(-1);
+//	igl::readDMAT(TUTORIAL_SHARED_PATH +model+".dmat", v_setting);
+//	color = Eigen::MatrixXd::Constant(SelectedData.F.rows(), 3, 1);
+//	for (int f = 0; f < SelectedData.F.rows(); f++)
+//	{
+//		if (v_setting(SelectedData.F(f, 0)) >= 0 && v_setting(SelectedData.F(f, 1)) >= 0 && v_setting(SelectedData.F(f, 2)) >= 0)
+//		{
+//			color.row(f) = purple;
+//		}
+//		else
+//		{
+//			color.row(f) = gold;
+//		}
+//	}
+//	arap_data.max_iter = 10;
+//
+//	ARAP_PreCompute(viewer);
+//}
 
-	ARAP_PreCompute();
-}
-
-void ARAP_PreCompute()
+void ARAP_PreCompute(Viewer& viewer)
 {
-	igl::colon<int>(0, v_tri.rows() - 1, v_const);
+	igl::opengl::ViewerData& SelectedData = viewer.data_list[select_index];
+	VectorXi& v_const = models[select_index].v_const;
+	VectorXi& v_setting = models[select_index].v_setting;
+	igl::colon<int>(0, SelectedData.V.rows() - 1, v_const);
 	v_const.conservativeResize(stable_partition(v_const.data(), v_const.data() + v_const.size(),
-		[](int i)->bool {return v_setting(i) >= 0; }) - v_const.data());
-	igl::arap_precomputation(v_tri, f_tri, v_tri.cols(), v_const, arap_data);
+		[&v_setting](int i)->bool {return v_setting(i) >= 0; }) - v_const.data());
+	igl::arap_precomputation(SelectedData.V, SelectedData.F, SelectedData.V.cols(), v_const, arap_data);
 }
 
-void print_MatrixXd(const MatrixXd& matrix)
-{
-	for (int i = 0; i < matrix.rows(); i++)
-	{
-		cout << matrix.row(i) << endl;;
-	}
-	cout << endl;
-}
-void print_MatrixXi(const MatrixXi& matrix)
-{
-	for (int i = 0; i < matrix.rows(); i++)
-	{
-		cout << matrix.row(i) << endl;;
-	}
-	cout << endl;
-}
 bool pre_draw(Viewer& viewer)
 {
 	MatrixXd V_select;
-	V_select.resize(v_const.rows(), v_tri.cols());
+	igl::opengl::ViewerData& SelectedData = viewer.data_list[select_index];
+	VectorXi& v_const = models[select_index].v_const;
+	V_select.resize(v_const.rows(), SelectedData.V.cols());
 
 	for (int i = 0; i < v_const.size(); i++)
 	{
-		V_select.row(i) = v_tri.row(v_const(i));
+		V_select.row(i) = SelectedData.V.row(v_const(i));
 	}
 
 	if (V_select.size() > 0)
 	{
-		igl::arap_solve(V_select, arap_data, v_tri);
-		viewer.data().set_vertices(v_tri);
+		igl::arap_solve(V_select, arap_data, SelectedData.V);
+		viewer.data().set_vertices(SelectedData.V);
 		viewer.data().compute_normals();
 	}
 	return false;
@@ -149,10 +154,11 @@ bool key_down(Viewer& viewer, unsigned char key, int modifier) {
 		case 'c': {
 			if (bSetting)
 			{
+				VectorXi& v_setting = models[select_index].v_setting;
 				cout << "save v_setting:" << v_setting << endl;
 				MatrixXi temp(v_setting);
-				igl::writeDMAT(TUTORIAL_SHARED_PATH + model + ".dmat", temp, true);
-				ARAP_PreCompute();
+				//igl::writeDMAT(TUTORIAL_SHARED_PATH + model + ".dmat", temp, true);
+				//ARAP_PreCompute(viewer);
 			}
 			bSetting = !bSetting;
 		}
@@ -217,26 +223,27 @@ bool key_pressed(Viewer& viewer, unsigned int key, int modifiers)
 
 void move_face(Viewer& viewer, COORD_TYPE coord_type, double move_distance)
 {
+	igl::opengl::ViewerData& SelectedData = viewer.data_list[select_index];
 	if (fid > 0)
 	{
 		switch (coord_type)
 		{
 		case X_COORD: {
-			v_tri.row(f_tri.row(fid)[0])[0] += move_distance;
-			v_tri.row(f_tri.row(fid)[1])[0] += move_distance;
-			v_tri.row(f_tri.row(fid)[2])[0] += move_distance;
+			SelectedData.V.row(SelectedData.F.row(fid)[0])[0] += move_distance;
+			SelectedData.V.row(SelectedData.F.row(fid)[1])[0] += move_distance;
+			SelectedData.V.row(SelectedData.F.row(fid)[2])[0] += move_distance;
 			break;
 		}
 		case Z_COORD: {
-			v_tri.row(f_tri.row(fid)[0])[1] += move_distance;
-			v_tri.row(f_tri.row(fid)[1])[1] += move_distance;
-			v_tri.row(f_tri.row(fid)[2])[1] += move_distance;
+			SelectedData.V.row(SelectedData.F.row(fid)[0])[1] += move_distance;
+			SelectedData.V.row(SelectedData.F.row(fid)[1])[1] += move_distance;
+			SelectedData.V.row(SelectedData.F.row(fid)[2])[1] += move_distance;
 			break;
 		}
 		case Y_COORD: {
-			v_tri.row(f_tri.row(fid)[0])[2] += move_distance;
-			v_tri.row(f_tri.row(fid)[1])[2] += move_distance;
-			v_tri.row(f_tri.row(fid)[2])[2] += move_distance;
+			SelectedData.V.row(SelectedData.F.row(fid)[0])[2] += move_distance;
+			SelectedData.V.row(SelectedData.F.row(fid)[1])[2] += move_distance;
+			SelectedData.V.row(SelectedData.F.row(fid)[2])[2] += move_distance;
 			break;
 		}
 		default:
@@ -252,17 +259,21 @@ bool mouse_down(Viewer& viewer, int button, int modifier)
 	// Cast a ray in the view direction starting from the mouse position
 	double x = viewer.current_mouse_x;
 	double y = viewer.core().viewport(3) - viewer.current_mouse_y;
+	igl::opengl::ViewerData& SelectedData=viewer.data_list[select_index];
+	VectorXi& v_setting = models[select_index].v_setting;
+
 	if (igl::unproject_onto_mesh(Eigen::Vector2f(x, y), viewer.core().view,
-		viewer.core().proj, viewer.core().viewport, v_tri, f_tri, fid, bc))
+		viewer.core().proj, viewer.core().viewport, SelectedData.V, SelectedData.F, fid, bc))
 	{
-		v_setting(f_tri(fid, 0)) += 1;
-		v_setting(f_tri(fid, 1)) += 1;
-		v_setting(f_tri(fid, 2)) += 1;
+		v_setting(SelectedData.F(fid, 0)) += 1;
+		v_setting(SelectedData.F(fid, 1)) += 1;
+		v_setting(SelectedData.F(fid, 2)) += 1;
 
 		if (bSetting)
 		{
 			color.row(fid) << purple;
-			viewer.data().set_colors(color);
+			//viewer.data().set_colors(color);
+			SelectedData.set_colors(color);
 			return true;
 		}
 		else
@@ -270,15 +281,16 @@ bool mouse_down(Viewer& viewer, int button, int modifier)
 			color.row(fid) << red;
 			if (lastfid >= 0)
 			{
-				v_setting(f_tri(lastfid, 0)) -= 1;
-				v_setting(f_tri(lastfid, 1)) -= 1;
-				v_setting(f_tri(lastfid, 2)) -= 1;
+				v_setting(SelectedData.F(lastfid, 0)) -= 1;
+				v_setting(SelectedData.F(lastfid, 1)) -= 1;
+				v_setting(SelectedData.F(lastfid, 2)) -= 1;
 				color.row(lastfid) << gold;
 			}
-			viewer.data().set_colors(color);
+			//viewer.data().set_colors(color);
+			SelectedData.set_colors(color);
 			lastfid = fid;
 
-			ARAP_PreCompute();
+			ARAP_PreCompute(viewer);
 			return true;
 		}
 
@@ -286,18 +298,18 @@ bool mouse_down(Viewer& viewer, int button, int modifier)
 	return false;
 }
 
-void render_quads_obj(Viewer& viewer) {
+void render_quads_obj(string model, MatrixXd& v_out, MatrixXi& f_out) {
 	MatrixXd V;
 	MatrixXi F;
 	timer.start();
 	igl::readOBJ(TUTORIAL_SHARED_PATH + model + ".obj", V, F);
 
 	cout << "load obj time = " << timer.getElapsedTime() << endl;
-	v_tri = V;
-	f_tri.resize(F.rows() * 2, 3);
+	v_out = V;
+	f_out.resize(F.rows() * 2, 3);
 	for (int i = 0; i < F.rows(); i++)
 	{
-		f_tri.row(i * 2 + 0) << F.row(i)[0], F.row(i)[1], F.row(i)[2];
-		f_tri.row(i * 2 + 1) << F.row(i)[0], F.row(i)[2], F.row(i)[3];
+		f_out.row(i * 2 + 0) << F.row(i)[0], F.row(i)[1], F.row(i)[2];
+		f_out.row(i * 2 + 1) << F.row(i)[0], F.row(i)[2], F.row(i)[3];
 	}
 }
