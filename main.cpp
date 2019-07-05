@@ -18,20 +18,19 @@ MatrixXd color;
 int fid;
 int lastfid = -1;
 igl::ARAPData arap_data;
-VectorXi v_const,v_setting;
 
 RowVector3d red(255/ 255.0, 0 / 255.0, 0 / 255.0);
 RowVector3d purple(80.0 / 255.0, 64.0 / 255.0, 255.0 / 255.0);
 RowVector3d gold(255.0 / 255.0, 228.0 / 255.0, 58.0 / 255.0);
 bool bSetting = false;
 
-string model = "/horse_quad";
+
 //string model = "/gaoxin-selection";
 //string model = "/box_test";
 //string model = "/cube_40k";
 
 vector<string> names =
-{"/NiGaoXinII_Base-Low-Head","/horse_quad" /*,"/horse_quad" *//*"/horse_quad","/NiGaoXinII_Base-Low-Head","/box_test","/cube_40k" */};
+{/*"/NiGaoXinII_Base-Low-Head","/horse_quad", */"/NiGaoXinII_Base-Low-Head","/eye"/*,"/box_test"*/};
 vector<Model> models;
 
 int select_index = 0;
@@ -61,16 +60,16 @@ int main(int argc, char* argv[]) {
 		v_setting.resize(SelectedData.V.rows());
 		v_setting.setConstant(-1);
 		igl::readDMAT(TUTORIAL_SHARED_PATH + models[select_index].name + ".dmat", v_setting);
-		color = Eigen::MatrixXd::Constant(SelectedData.F.rows(), 3, 1);
+		models[select_index].color = Eigen::MatrixXd::Constant(SelectedData.F.rows(), 3, 1);
 		for (int f = 0; f < SelectedData.F.rows(); f++)
 		{
 			if (v_setting(SelectedData.F(f, 0)) >= 0 && v_setting(SelectedData.F(f, 1)) >= 0 && v_setting(SelectedData.F(f, 2)) >= 0)
 			{
-				color.row(f) = purple;
+				models[select_index].color.row(f) = purple;
 			}
 			else
 			{
-				color.row(f) = gold;
+				models[select_index].color.row(f) = gold;
 			}
 		}
 		arap_data.max_iter = 10;
@@ -157,8 +156,8 @@ bool key_down(Viewer& viewer, unsigned char key, int modifier) {
 				VectorXi& v_setting = models[select_index].v_setting;
 				cout << "save v_setting:" << v_setting << endl;
 				MatrixXi temp(v_setting);
-				//igl::writeDMAT(TUTORIAL_SHARED_PATH + model + ".dmat", temp, true);
-				//ARAP_PreCompute(viewer);
+				igl::writeDMAT(TUTORIAL_SHARED_PATH + models[select_index].name + ".dmat", temp, true);
+				ARAP_PreCompute(viewer);
 			}
 			bSetting = !bSetting;
 		}
@@ -271,23 +270,23 @@ bool mouse_down(Viewer& viewer, int button, int modifier)
 
 		if (bSetting)
 		{
-			color.row(fid) << purple;
+			models[select_index].color.row(fid) << purple;
 			//viewer.data().set_colors(color);
-			SelectedData.set_colors(color);
+			SelectedData.set_colors(models[select_index].color);
 			return true;
 		}
 		else
 		{
-			color.row(fid) << red;
+			models[select_index].color.row(fid) << red;
 			if (lastfid >= 0)
 			{
 				v_setting(SelectedData.F(lastfid, 0)) -= 1;
 				v_setting(SelectedData.F(lastfid, 1)) -= 1;
 				v_setting(SelectedData.F(lastfid, 2)) -= 1;
-				color.row(lastfid) << gold;
+				models[select_index].color.row(lastfid) << gold;
 			}
 			//viewer.data().set_colors(color);
-			SelectedData.set_colors(color);
+			SelectedData.set_colors(models[select_index].color);
 			lastfid = fid;
 
 			ARAP_PreCompute(viewer);
